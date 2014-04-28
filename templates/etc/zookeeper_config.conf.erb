@@ -1,0 +1,8 @@
+CLUSTER='<%= scope.lookupvar('cluster') %>'
+ZOOKEEPERS=()
+<% if has_variable?('zookeeper_addresses') %>
+<% @zookeeper_addresses.each do | address | %>
+ZOOKEEPERS+=('<%= address %>')
+<% end %>
+<% end %>
+ZKCLI='/opt/solr-<%= @solr_version %>-scripts/zkcli.sh'
