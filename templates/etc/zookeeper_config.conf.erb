@@ -1,12 +1,12 @@
 CLUSTER='<%= scope.lookupvar('cluster') %>'
 ZOOKEEPERS=()
-<% if has_variable?('zookeeper_addresses') %>
+<% if has_variable?('zookeeper_addresses') -%>
 <% @zookeeper_addresses.each do | address | %>
 ZOOKEEPERS+=('<%= address %>')
 <% end %>
-<% else %>
+<% else -%>
 <% @zookeeper_nodes.each do | node | %>
-    ZOOKEEPERS+=('<%= node['parameters']['address'] %>:<%= node['parameters']['port'] %>')
+ZOOKEEPERS+=('<%= node['parameters']['address'] %>:<%= node['parameters']['client_port'] %>')
 <% end %>
-<% end %>
+<% end -%>
 ZKCLI='/opt/solr-<%= @solr_version %>-scripts/zkcli.sh'
