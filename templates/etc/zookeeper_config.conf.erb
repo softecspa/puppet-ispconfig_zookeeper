@@ -4,5 +4,9 @@ ZOOKEEPERS=()
 <% @zookeeper_addresses.each do | address | %>
 ZOOKEEPERS+=('<%= address %>')
 <% end %>
+<% else %>
+<% @zookeeper_nodes.each do | node | %>
+    ZOOKEEPERS+=('<%= node['parameters']['address'] %>:<%= node['parameters']['port'] %>')
+<% end %>
 <% end %>
 ZKCLI='/opt/solr-<%= @solr_version %>-scripts/zkcli.sh'
