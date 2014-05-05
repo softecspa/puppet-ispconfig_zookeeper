@@ -53,9 +53,9 @@ function clean()
 # i : DOPO un parametro previsto significano invece
 #     che il parametro richiede un argomento
 
+NOOUT=0
 
-
-TEMP=`getopt -o :a:w:c:s:d --long action:,confname:,confdir:,debug -n "$0" -- "$@"`
+TEMP=`getopt -o :a:w:c:s:d --long action:,confname:,confdir:,debug,noout -n "$0" -- "$@"`
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
 # Note the quotes around `$TEMP': they are essential!
 eval set -- "$TEMP"
@@ -68,7 +68,7 @@ while true; do
         shift 1
         ;;
     -a | --action )
-        if [ $2 != 'upconfig' ] && [ $2 != 'delete' ] && [ $2 != 'check' ] && [ $2 != 'checkconfigs' ]; then
+        if [ $2 != 'upconfig' ] && [ $2 != 'delete' ] && [ $2 != 'check' ] && [ $2 != 'checkconfigs' ] && [ $2 != 'getcollections' ]; then
             log_error "Error: undefined action $2"
             exit 1
         else
@@ -84,11 +84,17 @@ while true; do
         CONFDIR=$2
         shift 2
         ;;
+    --getcollections )
+        shift 2
+        ;;
+    --noout )
+        NOOUT=1
+        shift 2
+        ;;
     -- ) shift; break ;;
     * ) break ;;
   esac
 done
-
 ZOOKEEPER_ADDRESS=''
 #ordina casualmente l'array con gli indirizzi dei nodi zookeeper, partendo dal primo prova a fare nmap, il primo che risponde viene utilizzato per fare le query
 RANDOM_INDEX=`shuf --input-range=0-$(( ${#ZOOKEEPERS[*]} - 1 ))`
@@ -101,7 +107,9 @@ do
         log_debug "trying to reach ${ADDRESS}:${PORT}"
         port_state=`nmap -p$PORT $ADDRESS | grep "$PORT/tcp" | awk '{print $2}'`
         if [ "x$port_state" == "xopen" ]; then
-            log "zookeeper $ADDRESS:$PORT will be used"
+            if [ $NOOUT -eq 0 ]; then
+                log "zookeeper $ADDRESS:$PORT will be used"
+            fi
         else
             log_debug "status: $port_state, skip to next address"
         fi
@@ -142,6 +150,11 @@ case $ACTION in
             log_error "error uploading config $CONFDIR to ${ZOOKEEPER_ADDRESS}/${CLUSTER}/configs/${CONFNAME}.\n$ZKCLI -z ${ZOOKEEPER_ADDRESS}/${CLUSTER} -confdir $CONFDIR -confname $CONFNAME -cmd upconfig"
             exit 1
         fi
+        ;;
+    getcollections)
+        COLLECTIONS=`$ZKCLI -z ${ZOOKEEPER_ADDRESS}/${CLUSTER} -cmd list /collections/ | egrep '/collections/[^/]*$' | cut -d/ -f 3 | cut -d' ' -f1`
+        echo $COLLECTIONS
+        exit 0
         ;;
     * )
         log_error "no action defined"
