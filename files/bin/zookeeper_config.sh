@@ -34,9 +34,25 @@ function clean()
 # Classica funzione che spiega la sintassi
 function help()
 {
-    echo -e "\n\nSYNTAX:\n\n\tExplain command syntax here...\n\n"
-}
+    echo -e "Usage: `basename $0` --action=<action> [OPTIONS]\n
+    `basename $0` manage upload of solr config on zookeeper
 
+    OPTIONS:
+    -a|--action:\t action to perform. Available value are <upconfig|delete|check|checkconfigs|getcollections|listconfig>
+    \t\t\t - upconfig:      upload configuration files present in --confdir using name declared in --confname
+    \t\t\t - delete:        delete configuration specified in --confname
+    \t\t\t - check:         exit with 0 if configuration specified in --confname exists. Exit with 0 otherwise
+    \t\t\t - checkconfigs:  compare conf files present in --confdir with config file already uploaded and named as --confname.
+    \t\t\t - getcollections:return a list of presents collections
+    \t\t\t - listconfig:    return a list of presents configs
+
+    --confdir:\t\t directory containing collection's xml configuration files that will be checked
+    --confname:\t\t name for the config that will be uploaded or checked.
+    --noout:\t\t suppress information output
+    -d|--debug:\t\t enable debug mode
+    -h|--help:\t\t print this help and exit\n\n"
+    exit 0
+}
 # Funzione chiamata alla fine dello script
 # restituisce 0 a meno che non gli si passi
 # un valore come primo parametro
@@ -54,8 +70,11 @@ function clean()
 #     che il parametro richiede un argomento
 
 NOOUT=0
+CONFNAME=''
+CONFDIR=''
+DEBUG=0
 
-TEMP=`getopt -o :a:w:c:s:d --long action:,confname:,confdir:,debug,noout -n "$0" -- "$@"`
+TEMP=`getopt -o :a:w:c:s:dh --long action:,confname:,confdir:,debug,noout,help,listconfig -n "$0" -- "$@"`
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
 # Note the quotes around `$TEMP': they are essential!
 eval set -- "$TEMP"
@@ -68,7 +87,7 @@ while true; do
         shift 1
         ;;
     -a | --action )
-        if [ $2 != 'upconfig' ] && [ $2 != 'delete' ] && [ $2 != 'check' ] && [ $2 != 'checkconfigs' ] && [ $2 != 'getcollections' ]; then
+        if [ $2 != 'upconfig' ] && [ $2 != 'delete' ] && [ $2 != 'check' ] && [ $2 != 'checkconfigs' ] && [ $2 != 'getcollections' ] && [ $2 != 'listconfig' ]; then
             log_error "Error: undefined action $2"
             exit 1
         else
@@ -87,8 +106,16 @@ while true; do
     --getcollections )
         shift 2
         ;;
+    --listconfig )
+        shift 2
+        ;;
     --noout )
         NOOUT=1
+        shift 2
+        ;;
+    -h | --help)
+        help
+        exit
         shift 2
         ;;
     -- ) shift; break ;;
@@ -108,7 +135,7 @@ do
         port_state=`nmap -p$PORT $ADDRESS | grep "$PORT/tcp" | awk '{print $2}'`
         if [ "x$port_state" == "xopen" ]; then
             if [ $NOOUT -eq 0 ]; then
-                log "zookeeper $ADDRESS:$PORT will be used"
+                log_debug "zookeeper $ADDRESS:$PORT will be used"
             fi
         else
             log_debug "status: $port_state, skip to next address"
@@ -123,10 +150,18 @@ fi
 
 case $ACTION in
     check )
+        if [ "x${CONFNAME}" == "x" ]; then
+            log_error "--confname is mandatory in --action=check"
+            exit 1
+        fi
         ${ZKCLI} -z ${ZOOKEEPER_ADDRESS}/${CLUSTER}/configs/${CONFNAME} -cmd list > /dev/null 2>&1
         exit $?
         ;;
     checkconfigs)
+        if [ "x${CONFNAME}" == "x" ] || [ "x${CONFDIR}" == "x" ]; then
+            log_error "--confname and --condfir are mandatory in --action=checkconfigs"
+            exit 1
+        fi
         tmp_confdir=`mktemp -d`
         log_debug "download ${CONFNAME} in $tmp_confdir"
         ${ZKCLI} -z ${ZOOKEEPER_ADDRESS}/${CLUSTER} -confname ${CONFNAME} -confdir $tmp_confdir -cmd downconfig 2> /dev/null
@@ -140,6 +175,10 @@ case $ACTION in
         exit $exit_status
         ;;
     upconfig)
+        if [ "x${CONFNAME}" == "x" ] || [ "x${CONFDIR}" == "x" ]; then
+            log_error "--confname and --condfir are mandatory in --action=upconfig"
+            exit 1
+        fi
         log_debug "upload di $CONFIDIR per conf $CONFNAME"
         $ZKCLI -z ${ZOOKEEPER_ADDRESS}/${CLUSTER} -confdir $CONFDIR -confname $CONFNAME -cmd upconfig 2> /dev/null
         if [ $? -eq 0 ]; then
@@ -152,8 +191,14 @@ case $ACTION in
         fi
         ;;
     getcollections)
-        COLLECTIONS=`$ZKCLI -z ${ZOOKEEPER_ADDRESS}/${CLUSTER} -cmd list /collections/ | egrep '/collections/[^/]*$' | cut -d/ -f 3 | cut -d' ' -f1`
-        echo $COLLECTIONS
+        COLLECTIONS=`$ZKCLI -z ${ZOOKEEPER_ADDRESS}/${CLUSTER} -cmd list /collections/ 2> /dev/null | egrep '/collections/[^/]*$' | cut -d/ -f 3 | cut -d' ' -f1`
+        echo $COLLECTIONS | sed -e s'/\ /\n/'
+        exit 0
+        ;;
+    listconfig)
+        CONFIGS=`$ZKCLI -z ${ZOOKEEPER_ADDRESS}/${CLUSTER} -cmd list /configs/ 2> /dev/null | egrep '/configs/[^/]*$' | cut -d/ -f 3 | cut -d' ' -f1`
+        #echo $CONFIGS
+        echo $CONFIGS | sed -e s'/\ /\n/'
         exit 0
         ;;
     * )
